@@ -56,7 +56,7 @@ pub(crate) enum CtrlCmds {
   List,
 
   /// Manage controller networks
-  Network(Box<CtrlNetArgs>),
+  Network(CtrlNetArgs),
 }
 
 #[derive(Debug, Parser)]
@@ -72,10 +72,10 @@ pub(crate) struct CtrlNetArgs {
 #[derive(Debug, Parser)]
 pub(crate) enum CtrlNetCmds {
   /// Create a new network
-  Create(CtrlNetParams),
+  Create(Box<CtrlNetParams>),
 
   /// Update an existing network
-  Update(CtrlNetParams),
+  Update(Box<CtrlNetParams>),
 
   /// Delete an existing network
   Delete,
@@ -173,7 +173,7 @@ pub(crate) struct CtrlNetParams {
 impl From<CtrlNetParams> for crate::ztapi::types::ControllerNetwork {
   fn from(params: CtrlNetParams) -> Self {
     crate::ztapi::types::ControllerNetwork {
-      capabilities: vec![],
+      capabilities: vec![], // FIXME:
       creation_time: params.creation_time,
       enable_broadcast: params.enable_broadcast,
       id: params.id,
@@ -206,12 +206,12 @@ impl From<CtrlNetParams> for crate::ztapi::types::ControllerNetwork {
         .map(|v| {
           crate::ztapi::types::ControllerNetworkRoutesItem {
             target: Some(v),
-            via: None, // Assuming no 'via' for simplicity
+            via: None, // FIXME:
           }
         })
         .collect(),
-      rules: vec![],
-      tags: vec![],
+      rules: vec![], // FIXME:
+      tags: vec![],  // FIXME:
       v4_assign_mode: params.v4_assign_mode.map(|v| {
         if v {
           crate::ztapi::types::ControllerNetworkV4AssignMode { zt: Some(true) }
@@ -253,27 +253,75 @@ pub(crate) enum CtrlNetMemCmds {
   /// Show member information
   Info,
 
-  Update(CtrlNetMemParams),
+  Update(Box<CtrlNetMemParams>),
 }
 
 #[derive(Debug, Parser)]
-pub(crate) struct CtrlNetMemParams {}
+pub(crate) struct CtrlNetMemParams {
+  #[clap(long)]
+  /// Active bridge status for the member
+  pub(crate) active_bridge: Option<bool>,
+
+  #[clap(long)]
+  /// Address of the member
+  pub(crate) address: Option<String>,
+
+  #[clap(long)]
+  /// Whether the member is authorized
+  pub(crate) authorized: Option<bool>,
+
+  #[clap(long)]
+  /// ID of the member
+  pub(crate) id: Option<String>,
+
+  #[clap(long)]
+  /// Identity of the member
+  pub(crate) identity: Option<String>,
+
+  #[clap(long)]
+  /// IP assignments for the member
+  pub(crate) ip_assignments: Vec<String>,
+
+  #[clap(long)]
+  /// Network ID (nwid) for the member
+  pub(crate) nwid: Option<String>,
+
+  #[clap(long)]
+  /// Revision number for the member
+  pub(crate) revision: Option<i64>,
+
+  #[clap(long)]
+  /// Major version of the member
+  pub(crate) v_major: Option<i64>,
+
+  #[clap(long)]
+  /// Minor version of the member
+  pub(crate) v_minor: Option<i64>,
+
+  #[clap(long)]
+  /// Protocol version of the member
+  pub(crate) v_proto: Option<i64>,
+
+  #[clap(long)]
+  /// Revision version of the member
+  pub(crate) v_rev: Option<i64>,
+}
 
 impl From<CtrlNetMemParams> for crate::ztapi::types::ControllerNetworkMember {
-  fn from(_args: CtrlNetMemParams) -> Self {
+  fn from(params: CtrlNetMemParams) -> Self {
     crate::ztapi::types::ControllerNetworkMember {
-      active_bridge: None,
-      address: None,
-      authorized: None,
-      id: None,
-      identity: None,
-      ip_assignments: vec![],
-      nwid: None,
-      revision: None,
-      v_major: None,
-      v_minor: None,
-      v_proto: None,
-      v_rev: None,
+      active_bridge: params.active_bridge,
+      address: params.address,
+      authorized: params.authorized,
+      id: params.id,
+      identity: params.identity,
+      ip_assignments: params.ip_assignments,
+      nwid: params.nwid,
+      revision: params.revision,
+      v_major: params.v_major,
+      v_minor: params.v_minor,
+      v_proto: params.v_proto,
+      v_rev: params.v_rev,
     }
   }
 }
@@ -319,35 +367,102 @@ pub(crate) struct NetUpdateArgs {
   /// ID of the network to operate on
   pub(crate) network_id: String,
   #[clap(flatten)]
-  pub(crate) params: NetParams,
+  pub(crate) params: Box<NetParams>,
 }
 
 #[derive(Debug, Parser)]
-pub(crate) struct NetParams {}
+pub(crate) struct NetParams {
+  #[clap(long)]
+  pub(crate) allow_default: Option<bool>,
+
+  #[clap(long)]
+  pub(crate) allow_dns: Option<bool>,
+
+  #[clap(long)]
+  pub(crate) allow_global: Option<bool>,
+
+  #[clap(long)]
+  pub(crate) allow_managed: Option<bool>,
+
+  #[clap(long)]
+  /// Assigned IP addresses for the network
+  pub(crate) assigned_addresses: Vec<String>,
+
+  #[clap(long)]
+  /// Whether the network is bridged
+  pub(crate) bridge: Option<bool>,
+
+  #[clap(long)]
+  /// Whether the network broadcasts packets
+  pub(crate) broadcast_enabled: Option<bool>,
+
+  #[clap(long)]
+  /// ID of the network
+  pub(crate) id: Option<String>,
+
+  #[clap(long)]
+  /// MAC address for the network
+  pub(crate) mac: Option<String>,
+
+  #[clap(long)]
+  /// Maximum Transmission Unit (MTU) for the network
+  pub(crate) mtu: Option<i64>,
+
+  #[clap(long)]
+  pub(crate) multicast_subscriptions: Vec<String>,
+
+  #[clap(long)]
+  /// Name of the network
+  pub(crate) name: Option<String>,
+
+  #[clap(long)]
+  pub(crate) netconf_revision: Option<i64>,
+
+  #[clap(long)]
+  pub(crate) port_device_name: Option<String>,
+
+  #[clap(long)]
+  pub(crate) port_error: Option<i64>,
+
+  #[clap(long)]
+  /// Status of the network
+  pub(crate) status: Option<String>,
+
+  #[clap(long)]
+  /// Type of the network
+  pub(crate) type_: Option<String>,
+}
 
 impl From<NetParams> for crate::ztapi::types::Network {
-  fn from(_args: NetParams) -> Self {
+  fn from(params: NetParams) -> Self {
     // Convert NetParams to Network
     crate::ztapi::types::Network {
-      id: None,
-      name: None,
-      allow_default: None,
-      allow_dns: None,
-      allow_global: None,
-      allow_managed: None,
-      assigned_addresses: vec![],
-      bridge: None,
-      broadcast_enabled: None,
-      dns: None,
-      mac: None,
-      mtu: None,
-      multicast_subscriptions: vec![],
-      netconf_revision: None,
-      port_device_name: None,
-      port_error: None,
-      routes: vec![],
-      status: None,
-      type_: None,
+      allow_default: params.allow_default,
+      allow_dns: params.allow_dns,
+      allow_global: params.allow_global,
+      allow_managed: params.allow_managed,
+      assigned_addresses: params.assigned_addresses,
+      bridge: params.bridge,
+      broadcast_enabled: params.broadcast_enabled,
+      dns: None, // FIXME:
+      id: params.id,
+      mac: params.mac,
+      mtu: params.mtu,
+      multicast_subscriptions: params
+        .multicast_subscriptions
+        .iter()
+        .map(|v| crate::ztapi::types::NetworkSubtype1MulticastSubscriptionsItem {
+          adi: None, // FIXME:
+          mac: Some(v.clone()),
+        })
+        .collect::<Vec<_>>(),
+      name: params.name,
+      netconf_revision: params.netconf_revision,
+      port_device_name: params.port_device_name,
+      port_error: params.port_error,
+      routes: vec![], // FIXME:
+      status: params.status,
+      type_: params.type_,
     }
   }
 }

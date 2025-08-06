@@ -48,12 +48,12 @@ async fn main() -> anyhow::Result<()> {
       }
       cli::CtrlCmds::Network(net) => match net.cmd {
         cli::CtrlNetCmds::Create(args) => {
-          let r = client.generate_controller_network(&net.network_id, &args.into()).await?;
+          let r = client.generate_controller_network(&net.network_id, &(*args).into()).await?;
           log::info!("Network created successfully: {:?}", r);
           pretty_print(&r);
         }
         cli::CtrlNetCmds::Update(args) => {
-          let r = client.set_controller_network(&net.network_id, &args.into()).await?;
+          let r = client.set_controller_network(&net.network_id, &(*args).into()).await?;
           log::info!("Network updated successfully: {:?}", r);
           pretty_print(&r);
         }
@@ -68,7 +68,7 @@ async fn main() -> anyhow::Result<()> {
             pretty_print(&r);
           }
           cli::CtrlNetMemCmds::Update(params) => {
-            let body = params.into();
+            let body = (*params).into();
             let r = client.update_controller_network_member(&net.network_id, &member.member_id, &body).await?;
             log::info!("Member information: {:?}", r);
             pretty_print(&r);
@@ -116,7 +116,7 @@ async fn main() -> anyhow::Result<()> {
         pretty_print(&r);
       }
       cli::NetCmds::Update(args) => {
-        let body = args.params.into();
+        let body = (*args.params).into();
         let r = client.update_network(&args.network_id, &body).await?;
         log::info!("Network updated successfully: {:?}", r);
         pretty_print(&r);
