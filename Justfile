@@ -10,9 +10,6 @@ clippy:
 test:
   cargo test --all-targets --all-features
 
-build:
-  cargo build --bins -Z unstable-options --artifact-dir ./artifacts
-
 ci: fmt-check clippy test build
 
 fix:

@@ -31,6 +31,9 @@ pub(crate) struct Args {
 
 #[derive(Debug, Parser)]
 pub(crate) enum Command {
+  #[clap()]
+  Completions(CompletionsArgs),
+
   /// Show status of the node
   Status,
 
@@ -48,6 +51,11 @@ pub(crate) enum Command {
 }
 
 #[derive(Debug, Parser)]
+pub(crate) struct CompletionsArgs {
+  pub(crate) shell: clap_complete::Shell,
+}
+
+#[derive(Debug, Parser)]
 pub(crate) enum CtrlCmds {
   /// Show status of the controller
   Status,
@@ -61,7 +69,7 @@ pub(crate) enum CtrlCmds {
 
 #[derive(Debug, Parser)]
 pub(crate) struct CtrlNetArgs {
-  #[clap(long = "id", short = 'n')]
+  #[clap(long, short)]
   /// ID of the network to operate on
   pub(crate) network_id: String,
 
@@ -239,7 +247,7 @@ impl From<CtrlNetParams> for crate::ztapi::types::ControllerNetwork {
 
 #[derive(Debug, Parser)]
 pub(crate) struct CtrlNetMemArgs {
-  #[clap(long = "id", short = 'i')]
+  #[clap(long, short)]
   /// ID of the member to operate on
   pub(crate) member_id: String,
 
@@ -337,7 +345,7 @@ pub(crate) enum PeerCmds {
 
 #[derive(Debug, Parser)]
 pub(crate) struct PeerInfoArgs {
-  #[clap(long = "id", short = 'i')]
+  #[clap(long, short)]
   /// ID of the peer to operate on
   pub(crate) peer_id: String,
 }
@@ -356,14 +364,14 @@ pub(crate) enum NetCmds {
 
 #[derive(Debug, Parser)]
 pub(crate) struct NetInfoArgs {
-  #[clap(long = "id", short = 'n')]
+  #[clap(long, short)]
   /// ID of the network to operate on
   pub(crate) network_id: String,
 }
 
 #[derive(Debug, Parser)]
 pub(crate) struct NetUpdateArgs {
-  #[clap(long = "id", short = 'n')]
+  #[clap(long, short)]
   /// ID of the network to operate on
   pub(crate) network_id: String,
   #[clap(flatten)]

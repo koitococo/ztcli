@@ -1,6 +1,6 @@
 use std::{fmt::Display, fs};
 
-use clap::Parser as _;
+use clap::{CommandFactory, Parser as _};
 
 mod cli;
 mod ztapi;
@@ -31,6 +31,17 @@ async fn main() -> anyhow::Result<()> {
   let client = ztapi::Client::new(cli.endpoint.as_str(), &token)?;
 
   match cli.cmd {
+    cli::Command::Completions(args) => {
+      clap_complete::generate(
+        args.shell,
+        &mut cli::Args::command(),
+        std::env::current_exe()?
+          .file_name()
+          .map(|v| v.to_string_lossy().to_string())
+          .unwrap_or("ztcli".to_string()),
+        &mut std::io::stdout(),
+      );
+    }
     cli::Command::Status => {
       let r = client.get_status().await?;
       log::info!("Node status: {:?}", r);
