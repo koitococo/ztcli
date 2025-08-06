@@ -1,0 +1,353 @@
+use clap::Parser;
+
+#[derive(Debug, Parser)]
+#[clap(name = "ztcli", version = "0.1.0")]
+pub(crate) struct Args {
+  #[clap(long = "token", short = 'a', env = "TOKEN")]
+  /// Authentication token for the ZeroTier API
+  pub(crate) token: Option<String>,
+
+  #[clap(
+    long = "token-path",
+    short = 'p',
+    env = "TOKEN_PATH",
+    default_value = "/var/lib/zerotier-one/authtoken.secret"
+  )]
+  /// Path to the file containing the ZeroTier API authentication token
+  pub(crate) token_path: String,
+
+  #[clap(
+    long = "endpoint",
+    short = 'e',
+    env = "ENDPOINT",
+    default_value = "http://localhost:9993"
+  )]
+  /// Base URL for the ZeroTier API endpoint
+  pub(crate) endpoint: String,
+
+  #[clap(subcommand)]
+  pub(crate) cmd: Command,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum Command {
+  /// Show status of the node
+  Status,
+
+  /// Manage network controller
+  #[clap(subcommand)]
+  Controller(CtrlCmds),
+
+  /// Manage networks
+  #[clap(subcommand)]
+  Network(NetCmds),
+
+  /// Manage peers
+  #[clap(subcommand)]
+  Peer(PeerCmds),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum CtrlCmds {
+  /// Show status of the controller
+  Status,
+
+  /// List all networks managed by the controller
+  List,
+
+  /// Manage controller networks
+  Network(CtrlNetArgs),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct CtrlNetArgs {
+  #[clap(long = "id", short = 'n', )]
+  /// ID of the network to operate on
+  pub(crate) network_id: String,
+
+  #[clap(subcommand)]
+  pub(crate) cmd: CtrlNetCmds,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum CtrlNetCmds {
+  /// Create a new network
+  Create(CtrlNetParams),
+
+  /// Update an existing network
+  Update(CtrlNetParams),
+
+  /// Delete an existing network
+  Delete,
+
+  /// Manage network members
+  Member(CtrlNetMemArgs),
+
+  /// Show details of the network
+  Info,
+
+  /// List all members of the network
+  Members,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct CtrlNetParams {
+  #[clap(long)]
+  /// Creation time of the network
+  pub(crate) creation_time: Option<f64>,
+  
+  #[clap(long)]
+  /// Enable broadcast on the network
+  pub(crate) enable_broadcast: Option<bool>,
+  
+  #[clap(long)]
+  /// ID of the network
+  pub(crate) id: Option<String>,
+  
+  #[clap(long)]
+  /// IP assignment pools for the network
+  /// Format: "start-end", e.g., "192.168.1.1-192.168.1.254"
+  pub(crate) ip_assignment_pools: Vec<String>,
+  
+  #[clap(long)]
+  /// MTU (Maximum Transmission Unit) for the network
+  pub(crate) mtu: Option<i64>,
+  
+  #[clap(long)]
+  /// Multicast limit for the network
+  pub(crate) multicast_limit: Option<i64>,
+  
+  #[clap(long)]
+  /// Name of the network
+  pub(crate) name: Option<String>,
+  
+  #[clap(long)]
+  /// Network ID (nwid) for the network
+  pub(crate) nwid: Option<String>,
+  
+  #[clap(long)]
+  /// Object type for the network
+  pub(crate) objtype: Option<String>,
+  
+  #[clap(long)]
+  /// Whether the network is private
+  /// If true, the network is private and every member must be explicitly authorized
+  /// If false, the network is public and any member can join
+  pub(crate) private: Option<bool>,
+  
+  #[clap(long)]
+  /// Remote trace level for the network
+  pub(crate) remote_trace_level: Option<i64>,
+  
+  #[clap(long)]
+  /// Remote trace target for the network
+  pub(crate) remote_trace_target: Option<String>,
+  
+  #[clap(long)]
+  /// Revision number for the network
+  pub(crate) revision: Option<i64>,
+  
+  #[clap(long)]
+  /// Routes for the network
+  /// Format: "target", e.g., "192.168.1.0/24"
+  /// Currently, 'via' is not supported
+  pub(crate) routes: Vec<String>,
+  
+  #[clap(long)]
+  /// V4 assign mode for the network
+  pub(crate) v4_assign_mode: Option<bool>,
+  
+  #[clap(long)]
+  /// V6 assign mode for the network
+  pub(crate) v6_assign_mode_6plane: Option<bool>,
+  
+  #[clap(long)]
+  /// V6 assign mode for the network using RFC 4193
+  pub(crate) v6_assign_mode_rfc4193: Option<bool>,
+  
+  #[clap(long)]
+  /// V6 assign mode for the network using ZeroTier's own method
+  pub(crate) v6_assign_mode_zt: Option<bool>,
+}
+
+impl From<CtrlNetParams> for crate::ztapi::types::ControllerNetwork {
+  fn from(params: CtrlNetParams) -> Self {
+    crate::ztapi::types::ControllerNetwork {
+      capabilities: vec![],
+      creation_time: params.creation_time,
+      enable_broadcast: params.enable_broadcast,
+      id: params.id,
+      ip_assignment_pools: params
+        .ip_assignment_pools
+        .into_iter()
+        .filter_map(|v| {
+          let Some((start, end)) = v.split_once("-") else {
+            log::warn!("Invalid IP assignment pool format: {}", v);
+            return None;
+          };
+          Some(crate::ztapi::types::ControllerNetworkIpAssignmentPoolsItem {
+            ip_range_end: Some(end.to_string()),
+            ip_range_start: Some(start.to_string()),
+          })
+        })
+        .collect(),
+      mtu: params.mtu.map(|v| v.into()),
+      multicast_limit: params.multicast_limit,
+      name: params.name,
+      nwid: params.nwid,
+      objtype: params.objtype,
+      private: params.private,
+      remote_trace_level: params.remote_trace_level,
+      remote_trace_target: params.remote_trace_target,
+      revision: params.revision,
+      routes: params
+        .routes
+        .into_iter()
+        .map(|v| {
+          crate::ztapi::types::ControllerNetworkRoutesItem {
+            target: Some(v),
+            via: None, // Assuming no 'via' for simplicity
+          }
+        })
+        .collect(),
+      rules: vec![],
+      tags: vec![],
+      v4_assign_mode: params.v4_assign_mode.map(|v| {
+        if v {
+          crate::ztapi::types::ControllerNetworkV4AssignMode { zt: Some(true) }
+        } else {
+          crate::ztapi::types::ControllerNetworkV4AssignMode { zt: Some(false) }
+        }
+      }),
+      v6_assign_mode: {
+        if params.v6_assign_mode_6plane.is_none() &&
+          params.v6_assign_mode_rfc4193.is_none() &&
+          params.v6_assign_mode_zt.is_none()
+        {
+          None
+        } else {
+          Some(crate::ztapi::types::ControllerNetworkV6AssignMode {
+            _6plane: params.v6_assign_mode_6plane,
+            rfc4193: params.v6_assign_mode_rfc4193,
+            zt: params.v6_assign_mode_zt,
+          })
+        }
+      },
+    }
+  }
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct CtrlNetMemArgs {
+  #[clap(long = "id", short = 'i')]
+  /// ID of the member to operate on
+  pub(crate) member_id: String,
+
+  #[clap(subcommand)]
+  pub(crate) cmd: CtrlNetMemCmds,
+}
+
+#[derive(Debug, Parser)]
+#[clap(value_enum)]
+pub(crate) enum CtrlNetMemCmds {
+  /// Show member information
+  Info,
+
+  Update(CtrlNetMemParams),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct CtrlNetMemParams {}
+
+impl From<CtrlNetMemParams> for crate::ztapi::types::ControllerNetworkMember {
+  fn from(_args: CtrlNetMemParams) -> Self {
+    crate::ztapi::types::ControllerNetworkMember {
+      active_bridge: None,
+      address: None,
+      authorized: None,
+      id: None,
+      identity: None,
+      ip_assignments: vec![],
+      nwid: None,
+      revision: None,
+      v_major: None,
+      v_minor: None,
+      v_proto: None,
+      v_rev: None,
+    }
+  }
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum PeerCmds {
+  /// List all peers
+  List,
+
+  /// Show information about a specific peer
+  Info(PeerInfoArgs),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct PeerInfoArgs {
+  #[clap(long = "id", short = 'i')]
+  /// ID of the peer to operate on
+  pub(crate) peer_id: String,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum NetCmds {
+  /// List all networks
+  List,
+
+  /// Show information about a specific network
+  Info(NetInfoArgs),
+
+  /// Update an existing network
+  Update(NetUpdateArgs),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct NetInfoArgs {
+  #[clap(long = "id", short = 'n')]
+  /// ID of the network to operate on
+  pub(crate) network_id: String,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct NetUpdateArgs {
+  #[clap(long = "id", short = 'n')]
+  /// ID of the network to operate on
+  pub(crate) network_id: String,
+  #[clap(flatten)]
+  pub(crate) params: NetParams,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct NetParams {}
+
+impl From<NetParams> for crate::ztapi::types::Network {
+  fn from(_args: NetParams) -> Self {
+    // Convert NetParams to Network
+    crate::ztapi::types::Network {
+      id: None,
+      name: None,
+      allow_default: None,
+      allow_dns: None,
+      allow_global: None,
+      allow_managed: None,
+      assigned_addresses: vec![],
+      bridge: None,
+      broadcast_enabled: None,
+      dns: None,
+      mac: None,
+      mtu: None,
+      multicast_subscriptions: vec![],
+      netconf_revision: None,
+      port_device_name: None,
+      port_error: None,
+      routes: vec![],
+      status: None,
+      type_: None,
+    }
+  }
+}
