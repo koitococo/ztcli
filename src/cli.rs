@@ -56,12 +56,12 @@ pub(crate) enum CtrlCmds {
   List,
 
   /// Manage controller networks
-  Network(CtrlNetArgs),
+  Network(Box<CtrlNetArgs>),
 }
 
 #[derive(Debug, Parser)]
 pub(crate) struct CtrlNetArgs {
-  #[clap(long = "id", short = 'n', )]
+  #[clap(long = "id", short = 'n')]
   /// ID of the network to operate on
   pub(crate) network_id: String,
 
@@ -95,76 +95,76 @@ pub(crate) struct CtrlNetParams {
   #[clap(long)]
   /// Creation time of the network
   pub(crate) creation_time: Option<f64>,
-  
+
   #[clap(long)]
   /// Enable broadcast on the network
   pub(crate) enable_broadcast: Option<bool>,
-  
+
   #[clap(long)]
   /// ID of the network
   pub(crate) id: Option<String>,
-  
+
   #[clap(long)]
   /// IP assignment pools for the network
   /// Format: "start-end", e.g., "192.168.1.1-192.168.1.254"
   pub(crate) ip_assignment_pools: Vec<String>,
-  
+
   #[clap(long)]
   /// MTU (Maximum Transmission Unit) for the network
   pub(crate) mtu: Option<i64>,
-  
+
   #[clap(long)]
   /// Multicast limit for the network
   pub(crate) multicast_limit: Option<i64>,
-  
+
   #[clap(long)]
   /// Name of the network
   pub(crate) name: Option<String>,
-  
+
   #[clap(long)]
   /// Network ID (nwid) for the network
   pub(crate) nwid: Option<String>,
-  
+
   #[clap(long)]
   /// Object type for the network
   pub(crate) objtype: Option<String>,
-  
+
   #[clap(long)]
   /// Whether the network is private
   /// If true, the network is private and every member must be explicitly authorized
   /// If false, the network is public and any member can join
   pub(crate) private: Option<bool>,
-  
+
   #[clap(long)]
   /// Remote trace level for the network
   pub(crate) remote_trace_level: Option<i64>,
-  
+
   #[clap(long)]
   /// Remote trace target for the network
   pub(crate) remote_trace_target: Option<String>,
-  
+
   #[clap(long)]
   /// Revision number for the network
   pub(crate) revision: Option<i64>,
-  
+
   #[clap(long)]
   /// Routes for the network
   /// Format: "target", e.g., "192.168.1.0/24"
   /// Currently, 'via' is not supported
   pub(crate) routes: Vec<String>,
-  
+
   #[clap(long)]
   /// V4 assign mode for the network
   pub(crate) v4_assign_mode: Option<bool>,
-  
+
   #[clap(long)]
   /// V6 assign mode for the network
   pub(crate) v6_assign_mode_6plane: Option<bool>,
-  
+
   #[clap(long)]
   /// V6 assign mode for the network using RFC 4193
   pub(crate) v6_assign_mode_rfc4193: Option<bool>,
-  
+
   #[clap(long)]
   /// V6 assign mode for the network using ZeroTier's own method
   pub(crate) v6_assign_mode_zt: Option<bool>,
@@ -191,7 +191,7 @@ impl From<CtrlNetParams> for crate::ztapi::types::ControllerNetwork {
           })
         })
         .collect(),
-      mtu: params.mtu.map(|v| v.into()),
+      mtu: params.mtu,
       multicast_limit: params.multicast_limit,
       name: params.name,
       nwid: params.nwid,
