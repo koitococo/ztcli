@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, fs};
 
 use clap::Parser as _;
 
@@ -11,7 +11,10 @@ fn pretty_print<T: Display>(obj: &T) {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-  let _ = dotenvy::dotenv()?;
+  if fs::exists(".env")? {
+    let _ = dotenvy::dotenv()?;
+  }
+
   env_logger::init();
 
   let cli = cli::Args::parse();
