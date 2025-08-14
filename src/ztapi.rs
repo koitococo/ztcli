@@ -151,16 +151,12 @@ pub mod types {
 
   #[derive(Serialize, Deserialize, Debug, Clone)]
   pub struct Network {
-    #[doc = "Let ZeroTier modify the system's default route."]
     #[serde(rename = "allowDefault", default, skip_serializing_if = "Option::is_none")]
     pub allow_default: Option<bool>,
-    #[doc = "Let ZeroTier modify the system's DNS settings."]
     #[serde(rename = "allowDNS", default, skip_serializing_if = "Option::is_none")]
     pub allow_dns: Option<bool>,
-    #[doc = "Let ZeroTier manage IP addresses and Route assignments that aren't in private ranges (rfc1918)."]
     #[serde(rename = "allowGlobal", default, skip_serializing_if = "Option::is_none")]
     pub allow_global: Option<bool>,
-    #[doc = "Let ZeroTier to manage IP addresses and Route assignments."]
     #[serde(rename = "allowManaged", default, skip_serializing_if = "Option::is_none")]
     pub allow_managed: Option<bool>,
     #[serde(rename = "assignedAddresses", default, skip_serializing_if = "Vec::is_empty")]
@@ -173,7 +169,6 @@ pub mod types {
     pub dns: Option<NetworkSubtype1Dns>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub id: Option<String>,
-    #[doc = "MAC address for this network's interface."]
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mac: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -373,6 +368,7 @@ impl Client {
     match status {
       StatusCode::OK => Ok(response),
       StatusCode::UNAUTHORIZED => anyhow::bail!("unauthorized request"),
+      StatusCode::NOT_FOUND => anyhow::bail!("resource not found"),
       _ => anyhow::bail!("unexpected response: {}", status),
     }
   }

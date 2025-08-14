@@ -385,15 +385,19 @@ pub(crate) enum NetEditCmds {
 #[derive(Debug, Parser)]
 pub(crate) struct NetParams {
   #[clap(long)]
+  /// Let ZeroTier modify the system's default route
   pub(crate) allow_default: Option<bool>,
 
   #[clap(long)]
+  /// Let ZeroTier modify the system's DNS settings
   pub(crate) allow_dns: Option<bool>,
 
   #[clap(long)]
+  /// Let ZeroTier manage IP addresses and Route assignments that aren't in private ranges (rfc1918)
   pub(crate) allow_global: Option<bool>,
 
   #[clap(long)]
+  /// Let ZeroTier to manage IP addresses and Route assignments.
   pub(crate) allow_managed: Option<bool>,
 
   #[clap(long)]
@@ -413,7 +417,7 @@ pub(crate) struct NetParams {
   pub(crate) id: Option<String>,
 
   #[clap(long)]
-  /// MAC address for the network
+  /// MAC address for this network's interface
   pub(crate) mac: Option<String>,
 
   #[clap(long)]
