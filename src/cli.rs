@@ -38,15 +38,15 @@ pub(crate) enum Command {
   Status,
 
   /// Manage network controller
-  #[clap(subcommand)]
+  #[clap(subcommand, alias = "c")]
   Controller(CtrlCmds),
 
   /// Manage networks
-  #[clap(subcommand)]
+  #[clap(subcommand, alias = "n")]
   Network(NetCmds),
 
   /// Manage peers
-  #[clap(subcommand)]
+  #[clap(subcommand, alias = "p")]
   Peer(PeerCmds),
 }
 
@@ -63,6 +63,7 @@ pub(crate) enum CtrlCmds {
   /// List all networks managed by the controller
   List,
 
+  #[clap(alias = "n")]
   /// Manage controller networks
   Network(CtrlNetArgs),
 }
@@ -79,15 +80,15 @@ pub(crate) struct CtrlNetArgs {
 
 #[derive(Debug, Parser)]
 pub(crate) enum CtrlNetCmds {
+  #[clap(alias = "c")]
   /// Create a new network
   Create(Box<CtrlNetParams>),
 
+  #[clap(alias = "u")]
   /// Update an existing network
   Update(Box<CtrlNetParams>),
 
-  /// Delete an existing network
-  Delete,
-
+  #[clap(alias = "m")]
   /// Manage network members
   Member(CtrlNetMemArgs),
 
@@ -355,27 +356,30 @@ pub(crate) enum NetCmds {
   /// List all networks
   List,
 
+  /// Get information about a specific network or edit it
+  Edit(NetEditArgs),
+}
+
+#[derive(Debug, Parser)]
+pub(crate) struct NetEditArgs {
+  #[clap(long, short)]
+  /// ID of the network to operate on
+  pub(crate) network_id: String,
+
+  #[clap(subcommand)]
+  pub(crate) cmd: NetEditCmds,
+}
+
+#[derive(Debug, Parser)]
+pub(crate) enum NetEditCmds {
   /// Show information about a specific network
-  Info(NetInfoArgs),
+  Info,
 
-  /// Update an existing network
-  Update(NetUpdateArgs),
-}
+  /// Join a network or Update an existing network
+  Update(Box<NetParams>),
 
-#[derive(Debug, Parser)]
-pub(crate) struct NetInfoArgs {
-  #[clap(long, short)]
-  /// ID of the network to operate on
-  pub(crate) network_id: String,
-}
-
-#[derive(Debug, Parser)]
-pub(crate) struct NetUpdateArgs {
-  #[clap(long, short)]
-  /// ID of the network to operate on
-  pub(crate) network_id: String,
-  #[clap(flatten)]
-  pub(crate) params: Box<NetParams>,
+  /// Leave a network
+  Delete,
 }
 
 #[derive(Debug, Parser)]

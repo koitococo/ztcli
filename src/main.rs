@@ -71,10 +71,6 @@ async fn main() -> anyhow::Result<()> {
           log::info!("Network updated successfully: {:?}", r);
           pretty_print(&r);
         }
-        cli::CtrlNetCmds::Delete => {
-          client.delete_network(&net.network_id).await?;
-          log::info!("Network {} deleted successfully", net.network_id);
-        }
         cli::CtrlNetCmds::Member(member) => match member.cmd {
           cli::CtrlNetMemCmds::Info => {
             let r = client.get_controller_network_member(&net.network_id, &member.member_id).await?;
@@ -124,16 +120,25 @@ async fn main() -> anyhow::Result<()> {
           pretty_print(&i);
         }
       }
-      cli::NetCmds::Info(info) => {
-        let r = client.get_network(&info.network_id).await?;
-        log::info!("Network information: {:?}", r);
-        pretty_print(&r);
-      }
-      cli::NetCmds::Update(args) => {
-        let body = (*args.params).into();
-        let r = client.update_network(&args.network_id, &body).await?;
-        log::info!("Network updated successfully: {:?}", r);
-        pretty_print(&r);
+      cli::NetCmds::Edit(args) => {
+        let net_id = args.network_id;
+        match args.cmd {
+          cli::NetEditCmds::Info => {
+            let r = client.get_network(&net_id).await?;
+            log::info!("Network information: {:?}", r);
+            pretty_print(&r);
+          }
+          cli::NetEditCmds::Update(args) => {
+            let body = (*args).into();
+            let r = client.update_network(&net_id, &body).await?;
+            log::info!("Network joined or updated successfully: {:?}", r);
+            pretty_print(&r);
+          }
+          cli::NetEditCmds::Delete => {
+            client.delete_network(&net_id).await?;
+            log::info!("Network deleted successfully");
+          }
+        }
       }
     },
   }

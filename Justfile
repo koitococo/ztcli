@@ -10,7 +10,7 @@ clippy:
 test:
   cargo test --all-targets --all-features
 
-ci: fmt-check clippy test build
+ci: fmt-check clippy test
 
 fix:
   cargo clippy --fix --all-targets --all-features --allow-dirty --broken-code
