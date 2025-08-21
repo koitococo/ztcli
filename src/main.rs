@@ -1,4 +1,4 @@
-use clap::{CommandFactory as _, Parser};
+use clap::Parser;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 use tokio::fs;
@@ -103,8 +103,11 @@ impl Apply for Args {
 
 #[derive(Debug, Parser)]
 enum Command {
-  #[clap()]
+  #[cfg(feature = "clap_complete")]
   Completions(CompletionsArgs),
+
+  #[cfg(feature = "clap_usage")]
+  Usage,
 
   /// Show status of the node
   Status,
@@ -128,7 +131,22 @@ impl Apply for Command {
 
   async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
+      #[cfg(feature = "clap_complete")]
       Self::Completions(args) => args.apply((), &mut ()).await?,
+      #[cfg(feature = "clap_usage")]
+      Self::Usage => {
+        use clap::CommandFactory as _;
+
+        clap_usage::generate(
+          &mut Args::command(),
+          std::env::current_exe()
+            .unwrap()
+            .file_name()
+            .map(|v| v.to_string_lossy().to_string())
+            .unwrap_or("ztcli".to_string()),
+          &mut std::io::stdout(),
+        );
+      }
       Self::Status => {
         let r = client.get_status().await?;
         log::info!("Node status: {:?}", r);
@@ -142,16 +160,20 @@ impl Apply for Command {
   }
 }
 
+#[cfg(feature = "clap_complete")]
 #[derive(Debug, Parser)]
 struct CompletionsArgs {
   shell: clap_complete::Shell,
 }
 
+#[cfg(feature = "clap_complete")]
 impl Apply for CompletionsArgs {
   type Context = ();
   type PersistentState = ();
 
   async fn apply(self, _: Self::Context, _: &mut Self::PersistentState) -> anyhow::Result<()> {
+    use clap::CommandFactory as _;
+
     clap_complete::generate(
       self.shell,
       &mut Args::command(),
@@ -256,8 +278,7 @@ impl Apply for CtrlNetCmds {
     let next_ps = if let Some(inner) = ps.networks.get_mut(&network_id) {
       inner
     } else {
-      let inner = Default::default();
-      ps.networks.insert(network_id.clone(), inner);
+      ps.networks.insert(network_id.clone(), Default::default());
       ps.networks.get_mut(&network_id).unwrap() // We can assume this unwrap is always safe
     };
     match self {
