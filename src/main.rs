@@ -1,5 +1,7 @@
 use clap::{CommandFactory as _, Parser};
-use std::{fmt::Display, fs};
+use serde::{Deserialize, Serialize};
+use std::{collections::HashMap, fmt::Display};
+use tokio::fs;
 mod ztapi;
 use crate::ztapi::Client;
 
@@ -9,17 +11,19 @@ fn pretty_print<T: Display>(obj: &T) {
 
 #[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
-  if fs::exists(".env")? {
+  if std::fs::exists(".env")? {
     let _ = dotenvy::dotenv()?;
   }
 
   env_logger::init();
-  Args::parse().apply(()).await
+  Args::parse().apply((), &mut ()).await
 }
 
 trait Apply {
   type Context;
-  async fn apply(self, ctx: Self::Context) -> anyhow::Result<()>;
+  type PersistentState;
+
+  async fn apply(self, ctx: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()>;
 }
 
 #[derive(Debug, Parser)]
@@ -47,14 +51,28 @@ struct Args {
   /// Base URL for the ZeroTier API endpoint
   endpoint: String,
 
+  #[clap(long = "state_path", short = 's', env = "STATE_PATH", default_value = "state.json")]
+  /// Path to state file which contains datas used only by ztcli
+  state_path: String,
+
+  #[clap(long = "disable_state", short = 'S', env = "DISABLE_STATE", default_value = "false")]
+  /// If true, ztcli will not read state from filesystem, and will not sync changes to it
+  disable_state: bool,
+
   #[clap(subcommand)]
   cmd: Command,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+struct States {
+  ctrl_net_states: CtrlNetStates,
+}
+
 impl Apply for Args {
   type Context = ();
+  type PersistentState = ();
 
-  async fn apply(self, _: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, _: Self::Context, _: &mut Self::PersistentState) -> anyhow::Result<()> {
     let Some(token) = self.token.clone().or_else(|| match std::fs::read_to_string(&self.token_path) {
       Ok(content) => Some(content),
       Err(e) => {
@@ -65,8 +83,20 @@ impl Apply for Args {
       anyhow::bail!("No authentication token provided");
     };
 
+    let mut ps: States = if self.disable_state || !std::fs::exists(&self.state_path)? {
+      Default::default()
+    } else {
+      let content = fs::read_to_string(&self.state_path).await?;
+      serde_json::from_str(&content)?
+    };
+
     let client = ztapi::Client::new(self.endpoint.as_str(), &token)?;
-    self.cmd.apply(client).await?;
+    self.cmd.apply(client, &mut ps.ctrl_net_states).await?;
+
+    if !self.disable_state {
+      let content = serde_json::to_string(&ps)?;
+      fs::write(&self.state_path, content).await?;
+    }
     Ok(())
   }
 }
@@ -94,18 +124,19 @@ enum Command {
 
 impl Apply for Command {
   type Context = Client;
+  type PersistentState = CtrlNetStates;
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
-      Self::Completions(args) => args.apply(()).await?,
+      Self::Completions(args) => args.apply((), &mut ()).await?,
       Self::Status => {
         let r = client.get_status().await?;
         log::info!("Node status: {:?}", r);
         pretty_print(&r);
       }
-      Self::Controller(args) => args.apply(client).await?,
-      Self::Network(args) => args.apply(client).await?,
-      Self::Peer(args) => args.apply(client).await?,
+      Self::Controller(args) => args.apply(client, ps).await?,
+      Self::Network(args) => args.apply(client, &mut ()).await?,
+      Self::Peer(args) => args.apply(client, &mut ()).await?,
     }
     Ok(())
   }
@@ -118,8 +149,9 @@ struct CompletionsArgs {
 
 impl Apply for CompletionsArgs {
   type Context = ();
+  type PersistentState = ();
 
-  async fn apply(self, _: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, _: Self::Context, _: &mut Self::PersistentState) -> anyhow::Result<()> {
     clap_complete::generate(
       self.shell,
       &mut Args::command(),
@@ -149,8 +181,9 @@ enum CtrlCmds {
 
 impl Apply for CtrlCmds {
   type Context = Client;
+  type PersistentState = CtrlNetStates;
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
       Self::Status => {
         let r = client.get_controller_status().await?;
@@ -164,7 +197,7 @@ impl Apply for CtrlCmds {
           pretty_print(&i);
         }
       }
-      Self::Network(args) => args.apply(client).await?,
+      Self::Network(args) => args.apply(client, ps).await?,
     }
     Ok(())
   }
@@ -180,10 +213,18 @@ struct CtrlNetArgs {
   cmd: CtrlNetCmds,
 }
 
+#[derive(Serialize, Deserialize, Default)]
+struct CtrlNetStates {
+  networks: HashMap<String, CtrlNetMemTagStates>,
+}
+
 impl Apply for CtrlNetArgs {
   type Context = Client;
+  type PersistentState = CtrlNetStates;
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> { self.cmd.apply((client, self.network_id)).await }
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
+    self.cmd.apply((client, self.network_id), ps).await
+  }
 }
 
 #[derive(Debug, Parser)]
@@ -209,8 +250,16 @@ enum CtrlNetCmds {
 
 impl Apply for CtrlNetCmds {
   type Context = (Client, String);
+  type PersistentState = CtrlNetStates;
 
-  async fn apply(self, (client, network_id): Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, (client, network_id): Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
+    let next_ps = if let Some(inner) = ps.networks.get_mut(&network_id) {
+      inner
+    } else {
+      let inner = Default::default();
+      ps.networks.insert(network_id.clone(), inner);
+      ps.networks.get_mut(&network_id).unwrap() // We can assume this unwrap is always safe
+    };
     match self {
       Self::Create(args) => {
         let r = client.generate_controller_network(&network_id, &(*args).into()).await?;
@@ -222,7 +271,7 @@ impl Apply for CtrlNetCmds {
         log::info!("Network updated successfully: {:?}", r);
         pretty_print(&r);
       }
-      Self::Member(args) => args.apply((client, network_id)).await?,
+      Self::Member(args) => args.apply((client, network_id), next_ps).await?,
       Self::Info => {
         let r = client.get_controller_network(&network_id).await?;
         log::info!("Network information: {:?}", r);
@@ -230,9 +279,15 @@ impl Apply for CtrlNetCmds {
       }
       Self::Members => {
         let r = client.get_controller_network_members(&network_id).await?;
+
         log::info!("Members information: {:?}", r);
         for (k, v) in r {
-          println!("{}: {}", k, v);
+          let msg = if let Some(tag) = next_ps.tags.get_mut(&k) {
+            format!("{k}: {v} ({tag})")
+          } else {
+            format!("{k}: {v}")
+          };
+          pretty_print(&msg);
         }
       }
     }
@@ -399,9 +454,10 @@ struct CtrlNetMemArgs {
 
 impl Apply for CtrlNetMemArgs {
   type Context = (Client, String);
+  type PersistentState = CtrlNetMemTagStates;
 
-  async fn apply(self, (client, network_id): Self::Context) -> anyhow::Result<()> {
-    self.cmd.apply((client, network_id, self.member_id)).await
+  async fn apply(self, (client, network_id): Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
+    self.cmd.apply((client, network_id, self.member_id), ps).await
   }
 }
 
@@ -411,13 +467,19 @@ enum CtrlNetMemCmds {
   /// Show member information
   Info,
 
+  /// Update member information
   Update(Box<CtrlNetMemParams>),
+
+  Tag(CtrlNetMemTagArgs),
 }
 
 impl Apply for CtrlNetMemCmds {
   type Context = (Client, String, String);
+  type PersistentState = CtrlNetMemTagStates;
 
-  async fn apply(self, (client, network_id, member_id): Self::Context) -> anyhow::Result<()> {
+  async fn apply(
+    self, (client, network_id, member_id): Self::Context, ps: &mut Self::PersistentState,
+  ) -> anyhow::Result<()> {
     match self {
       Self::Info => {
         let r = client.get_controller_network_member(&network_id, &member_id).await?;
@@ -429,6 +491,9 @@ impl Apply for CtrlNetMemCmds {
         let r = client.update_controller_network_member(&network_id, &member_id, &body).await?;
         log::info!("Member information: {:?}", r);
         pretty_print(&r);
+      }
+      Self::Tag(args) => {
+        args.apply(member_id, ps).await?;
       }
     }
     Ok(())
@@ -506,6 +571,38 @@ impl From<CtrlNetMemParams> for crate::ztapi::types::ControllerNetworkMember {
 }
 
 #[derive(Debug, Parser)]
+struct CtrlNetMemTagArgs {
+  tag: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+struct CtrlNetMemTagStates {
+  tags: HashMap<String, String>,
+}
+
+impl Apply for CtrlNetMemTagArgs {
+  type Context = String;
+  type PersistentState = CtrlNetMemTagStates;
+
+  async fn apply(self, id: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
+    if let Some(tag) = self.tag {
+      if tag.is_empty() {
+        ps.tags.remove(&id);
+        log::info!("Tag removed for {}", id);
+      } else {
+        ps.tags.insert(id.clone(), tag.clone());
+        log::info!("Tag set for {}: {}", id, tag);
+      }
+    } else if let Some(tag) = ps.tags.get(&id) {
+      pretty_print(tag);
+    } else {
+      log::info!("No tag found for {}", id);
+    }
+    Ok(())
+  }
+}
+
+#[derive(Debug, Parser)]
 enum PeerCmds {
   /// List all peers
   List,
@@ -516,8 +613,9 @@ enum PeerCmds {
 
 impl Apply for PeerCmds {
   type Context = Client;
+  type PersistentState = ();
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
       Self::List => {
         let r = client.get_peers().await?;
@@ -527,7 +625,7 @@ impl Apply for PeerCmds {
         }
         Ok(())
       }
-      Self::Info(args) => args.apply(client).await,
+      Self::Info(args) => args.apply(client, ps).await,
     }
   }
 }
@@ -541,8 +639,9 @@ struct PeerInfoArgs {
 
 impl Apply for PeerInfoArgs {
   type Context = Client;
+  type PersistentState = ();
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, client: Self::Context, _: &mut Self::PersistentState) -> anyhow::Result<()> {
     let r = client.get_peer(&self.peer_id).await?;
     log::info!("Peer information: {:?}", r);
     pretty_print(&r);
@@ -561,8 +660,9 @@ enum NetCmds {
 
 impl Apply for NetCmds {
   type Context = Client;
+  type PersistentState = ();
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
       Self::List => {
         let r = client.get_networks().await?;
@@ -572,7 +672,7 @@ impl Apply for NetCmds {
         }
         Ok(())
       }
-      Self::Edit(args) => args.apply(client).await,
+      Self::Edit(args) => args.apply(client, ps).await,
     }
   }
 }
@@ -589,8 +689,11 @@ struct NetEditArgs {
 
 impl Apply for NetEditArgs {
   type Context = Client;
+  type PersistentState = ();
 
-  async fn apply(self, client: Self::Context) -> anyhow::Result<()> { self.cmd.apply((client, self.network_id)).await }
+  async fn apply(self, client: Self::Context, ps: &mut Self::PersistentState) -> anyhow::Result<()> {
+    self.cmd.apply((client, self.network_id), ps).await
+  }
 }
 
 #[derive(Debug, Parser)]
@@ -607,8 +710,9 @@ enum NetEditCmds {
 
 impl Apply for NetEditCmds {
   type Context = (Client, String);
+  type PersistentState = ();
 
-  async fn apply(self, (client, network_id): Self::Context) -> anyhow::Result<()> {
+  async fn apply(self, (client, network_id): Self::Context, _: &mut Self::PersistentState) -> anyhow::Result<()> {
     match self {
       Self::Info => {
         let r = client.get_network(&network_id).await?;
